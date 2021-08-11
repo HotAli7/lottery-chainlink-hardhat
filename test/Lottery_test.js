@@ -17,13 +17,18 @@ describe("Lottery Contract", function () {
     const MockLink = await ethers.getContractFactory("MockLink")
     const VRFCoordinatorMock = await ethers.getContractFactory("VRFCoordinatorMock")
     const Lottery = await ethers.getContractFactory("Lottery");
-    [owner, addr1, addr2, ...addrs] = await ethers.getSigners();
-console.log(owner.address)
+    [owner, addr1, addr2, ...addrs] = await ethers.getSigners(100);
+
     keyhash = '0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4'
     fee = '1000000000000000000'
+    tokenAddress = '0xe1be5d3f34e89de342ee97e6e90d405884da6c67';
+    feeWalletAddress = '0x4B64f9FEA9aCB68245b990F0A818F5b0D4AF353F'
     link = await MockLink.deploy()
     vrfCoordinatorMock = await VRFCoordinatorMock.deploy(link.address)    
     hardhatLottery = await Lottery.deploy(vrfCoordinatorMock.address, link.address, keyhash, fee);
+    
+    await hardhatLottery.setToken(link.address)
+    await hardhatLottery.setFeeWallet(feeWalletAddress)
   })
   it("Start New Lottery", async () => {
     //Before we can do an API request, we need to fund it with LINK
@@ -31,7 +36,18 @@ console.log(owner.address)
     
     await link.transfer(hardhatLottery.address, '5000000000000000000')
     let startTransaction = await hardhatLottery.start_new_lottery()
-    let enterTransaction = await hardhatLottery.enter(3, 7, 17, { from: owner.address, value: 1000000000000000 })
+    for (let i = 0; i < addrs.length; i++) {
+      console.log(addrs[i].address)
+      const r1 = parseInt(Math.random() * 100000) % 26
+      const r2 = parseInt(Math.random() * 100000) % 26
+      const r3 = parseInt(Math.random() * 100000) % 26
+      console.log("Entered random number: ", r1, r2, r3);
+      let enterTransaction = await hardhatLottery.connect(addrs[i]).enter(r1, r2, r3, { from: addrs[i].address, value: 1000000000000000 })
+    }
+
+    const players = await hardhatLottery.get_players();
+    console.log("Entered Players: ", players)
+    
     let endTransaction = await hardhatLottery.end_lottery()
     let pickWinnerTransaction = await hardhatLottery.pickWinner()
 

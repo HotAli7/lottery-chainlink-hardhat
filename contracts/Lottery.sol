@@ -1,7 +1,11 @@
 pragma solidity ^0.6.6;
 import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract Lottery is VRFConsumerBase {
+contract Lottery is VRFConsumerBase, Ownable {
+    IERC20 private lotteryToken;
+    address payable private feeWallet;
     enum LOTTERY_STATE { OPEN, CLOSED, CALCULATING_WINNER }
     LOTTERY_STATE public lottery_state;
     uint256 public lotteryId;
@@ -104,6 +108,10 @@ contract Lottery is VRFConsumerBase {
     function enter(uint64 _number1, uint64 _number2, uint64 _number3) public payable {
         require(msg.value == MINIMUM, "Amount should be 0.001ETH");
         require(lottery_state == LOTTERY_STATE.OPEN, "New lottery is not started");
+        
+        lotteryToken.approve(address(this), msg.value);
+        lotteryToken.transferFrom(address(this), feeWallet, msg.value);
+
         players.push(msg.sender);
 
         require(_number1 >= 0 && _number1 < 26, "Lottery Number should be between 0 and 25.");
@@ -113,13 +121,12 @@ contract Lottery is VRFConsumerBase {
         _lotteryValue.push(LotteryValue(msg.sender, _number1, _number2, _number3));
     } 
     
-    function start_new_lottery() public {
+    function start_new_lottery() public onlyOwner {
         require(lottery_state == LOTTERY_STATE.CLOSED, "can't start a new lottery yet");
         lottery_state = LOTTERY_STATE.OPEN;
     }
-  
-    function end_lottery() public
-    {
+
+    function end_lottery() public onlyOwner {
         require(lottery_state == LOTTERY_STATE.OPEN, "The lottery hasn't even started!");
         // add a require here so that only the oracle contract can
         // call the fulfill alarm method
@@ -130,7 +137,8 @@ contract Lottery is VRFConsumerBase {
     function pickWinner() public {
         require(lottery_state == LOTTERY_STATE.CALCULATING_WINNER, "You aren't at that stage yet!");
 
-        uint jackPotAmount = ( address(this).balance / 1000000 ) * 923077;
+        uint tokenAmount = lotteryToken.balanceOf(feeWallet);
+        uint jackPotAmount = ( tokenAmount / 1000000 ) * 923077;
 
         getRandomNumber(block.timestamp + lotteryId + 1);
         getRandomNumber(block.timestamp + lotteryId + 2);
@@ -153,7 +161,7 @@ contract Lottery is VRFConsumerBase {
             }
             if (winnerType == 2) {
                 secondWinners.push(_lotteryValue[i].player);
-            } else {
+            } else if (winnerType == 3) {
                 firstWinners.push(_lotteryValue[i].player);
             }
         }
@@ -165,12 +173,12 @@ contract Lottery is VRFConsumerBase {
             if (firstWinners.length > 0) {
                 uint firstAmount = jackPotAmount - secondAmount;
                 sendFunds( firstWinners, firstAmount / firstWinners.length );
-            } else {
-                
             }
         } else if (firstWinners.length > 0) {            
             sendFunds( firstWinners, jackPotAmount / firstWinners.length );
         }
+        
+        balance = lotteryToken.balanceOf(feeWallet);
         
         for (uint i = 0; i < players.length; i++) {
             delete _lotteryValue[i];
@@ -188,16 +196,27 @@ contract Lottery is VRFConsumerBase {
             uint160 b = uint160(a);
             address payable receiver = address(b);
             // LINK.transferFrom(address(this), receivers[i], amount);
-            receiver.transfer(amount);
+            lotteryToken.transferFrom(feeWallet, receiver, amount);
         }
-        balance = address(this).balance;
     }
 
     function get_players() public view returns (address payable[] memory) {
         return players;
     }
+
+    function get_lottery_value(uint index) public view returns (uint64, uint64, uint64) {
+        return ( _lotteryValue[index].number1, _lotteryValue[index].number2, _lotteryValue[index].number3 );
+    }
     
     function get_pot() public view returns(uint256){
         return address(this).balance;
+    }
+
+    function setToken(address _tokenAddress) public onlyOwner {
+        lotteryToken = IERC20(_tokenAddress);
+    }
+
+    function setFeeWallet(address payable _feeWalletAddress) public onlyOwner {
+        feeWallet = _feeWalletAddress;
     }
 }
