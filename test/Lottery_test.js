@@ -33,7 +33,6 @@ describe("Lottery Contract", function () {
   it("Start New Lottery", async () => {
     //Before we can do an API request, we need to fund it with LINK
     // await hre.run("fund-link", { contract: randomNumberConsumer.address, linkAddress: link.address })
-    
     await link.transfer(hardhatLottery.address, '5000000000000000000')
     let startTransaction = await hardhatLottery.start_new_lottery()
     for (let i = 0; i < addrs.length; i++) {
@@ -42,7 +41,14 @@ describe("Lottery Contract", function () {
       const r2 = parseInt(Math.random() * 100000) % 26
       const r3 = parseInt(Math.random() * 100000) % 26
       console.log("Entered random number: ", r1, r2, r3);
-      let enterTransaction = await hardhatLottery.connect(addrs[i]).enter(r1, r2, r3, { from: addrs[i].address, value: 1000000000000000 })
+      await link.transfer(addrs[i].address, '5000000000000000000')
+      await link.connect(addrs[i]).approve(feeWalletAddress, '5000000000000000000')
+      await link.connect(addrs[i]).approve(hardhatLottery.address, '5000000000000000000')
+      let enterTransaction = await hardhatLottery.connect(addrs[i]).enter(r1, r2, r3)
+      
+    
+    let balance = await hardhatLottery.balance()  
+    console.log("Remain Balance: ", parseInt(balance))
     }
 
     const players = await hardhatLottery.get_players();

@@ -5,16 +5,16 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Lottery is VRFConsumerBase, Ownable {
     IERC20 private lotteryToken;
-    address payable private feeWallet;
+    address private feeWallet;
     enum LOTTERY_STATE { OPEN, CLOSED, CALCULATING_WINNER }
     LOTTERY_STATE public lottery_state;
     uint256 public lotteryId;
-    address payable[] public players;
+    address[] public players;
     // .01 ETH
     uint256 public MINIMUM = 1000000000000000;
 
     struct LotteryValue {
-        address payable player;
+        address player;
         uint64 number1;
         uint64 number2;
         uint64 number3; 
@@ -26,8 +26,8 @@ contract Lottery is VRFConsumerBase, Ownable {
     uint256 public winnerNumber2;
     uint256 public winnerNumber3;
 
-    address payable[] public firstWinners;
-    address payable[] public secondWinners;
+    address[] public firstWinners;
+    address[] public secondWinners;
 
     uint8 public winnerType;
     
@@ -39,7 +39,7 @@ contract Lottery is VRFConsumerBase, Ownable {
     uint256 public balance;
     uint8 public randomNumberId;
 
-    address payable public winner;
+    address public winner;
     event RequestedRandomness(bytes32 requestId);
     
     /**
@@ -66,8 +66,6 @@ contract Lottery is VRFConsumerBase, Ownable {
         randomNumberId = 1;
         lottery_state = LOTTERY_STATE.CLOSED;
     }
-    receive() external payable {}
-    fallback() external payable {}
     /** 
      * Requests randomness from a user-provided seed
      */
@@ -101,16 +99,15 @@ contract Lottery is VRFConsumerBase, Ownable {
      * DO NOT USE THIS IN PRODUCTION AS IT CAN BE CALLED BY ANY ADDRESS.
      * THIS IS PURELY FOR EXAMPLE PURPOSES.
      */
-    function withdrawLink() external {
-        require(LINK.transfer(msg.sender, LINK.balanceOf(address(this))), "Unable to transfer");
+    function withdrawLink() external onlyOwner {
+        require(LINK.transfer(msg.sender, LINK.balanceOf(feeWallet)), "Unable to transfer");
     }
 
-    function enter(uint64 _number1, uint64 _number2, uint64 _number3) public payable {
-        require(msg.value == MINIMUM, "Amount should be 0.001ETH");
+    function enter(uint64 _number1, uint64 _number2, uint64 _number3) public {
         require(lottery_state == LOTTERY_STATE.OPEN, "New lottery is not started");
-        
-        lotteryToken.approve(address(this), msg.value);
-        lotteryToken.transferFrom(address(this), feeWallet, msg.value);
+        uint256 allowance = lotteryToken.allowance(msg.sender, feeWallet);
+        require(allowance >= MINIMUM, "Check the token allowance");
+        lotteryToken.transferFrom(msg.sender, feeWallet, MINIMUM);
 
         players.push(msg.sender);
 
@@ -144,9 +141,9 @@ contract Lottery is VRFConsumerBase, Ownable {
         getRandomNumber(block.timestamp + lotteryId + 2);
         getRandomNumber(block.timestamp + lotteryId + 3);
 
-        winnerType = 0;
         for (uint i = 0; i < players.length; i++)
         {
+            winnerType = 0;
             if (_lotteryValue[i].number1 == winnerNumber1)
             {
                 winnerType++;
@@ -183,24 +180,24 @@ contract Lottery is VRFConsumerBase, Ownable {
         for (uint i = 0; i < players.length; i++) {
             delete _lotteryValue[i];
         }
-        players = new address payable[](0);
-        firstWinners = new address payable[](0);
-        secondWinners = new address payable[](0);
+        players = new address[](0);
+        firstWinners = new address[](0);
+        secondWinners = new address[](0);
         lottery_state = LOTTERY_STATE.CLOSED;
         //this kicks off the request and returns through fulfill_random
     }
 
-    function sendFunds( address payable[] memory receivers, uint amount ) public payable {
+    function sendFunds( address[] memory receivers, uint amount ) public {
         for (uint i = 0; i < receivers.length; i++) {
             address a = receivers[i];
             uint160 b = uint160(a);
-            address payable receiver = address(b);
+            address receiver = address(b);
             // LINK.transferFrom(address(this), receivers[i], amount);
             lotteryToken.transferFrom(feeWallet, receiver, amount);
         }
     }
 
-    function get_players() public view returns (address payable[] memory) {
+    function get_players() public view returns (address[] memory) {
         return players;
     }
 
@@ -216,7 +213,7 @@ contract Lottery is VRFConsumerBase, Ownable {
         lotteryToken = IERC20(_tokenAddress);
     }
 
-    function setFeeWallet(address payable _feeWalletAddress) public onlyOwner {
+    function setFeeWallet(address _feeWalletAddress) public onlyOwner {
         feeWallet = _feeWalletAddress;
     }
 }
